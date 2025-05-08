@@ -1,40 +1,49 @@
+import { createEffect } from "./signal";
+
 type Props = Record<string, any>;
 
-type FunctionComponent<P = {}> = (props: P & { children?: any }) => HTMLElement;
-
 export function h<K extends keyof JSX.IntrinsicElements>(
-    tag: K | FunctionComponent<any>,
+    tag: K | Function,
     props: JSX.IntrinsicElements[K] | null,
     ...children: any[]
-): HTMLElement {
+): HTMLElement | Node {
+    // If the tag is a function component
     if (typeof tag === 'function') {
-        return tag({ ...props, children: children.flat() });
+        // If it's a function component, call it and return its result
+        return tag({ ...props, children });
     }
 
-    // Regular HTML tag (like 'div', 'button', etc.)
+    // Otherwise, treat it as a standard HTML element tag
     const element = document.createElement(tag);
 
+    // Handle props
     for (const [key, value] of Object.entries(props ?? {})) {
-        if (key === 'children') continue;
-
-        if (key === 'ref' && typeof value === 'function') {
-            value(element); // call the ref callback with element
-        } else if (key === 'className') {
-            element.setAttribute('class', value);
-        } else if (key === 'style' && value && typeof value === 'object' && !Array.isArray(value)) {
-            const styleString = Object.entries(value as Record<string, string | number>)
-                .map(([k, v]) => `${k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)}:${v}`)
-                .join(';');
-            element.setAttribute('style', styleString);
+        if (key === 'style' && typeof value === 'object') {
+            for (const [k, v] of Object.entries(value)) {
+                element.style[k as any] = String(v);
+            }
         } else if (key.startsWith('on') && typeof value === 'function') {
             element.addEventListener(key.slice(2).toLowerCase(), value);
+        } else if (key === 'ref' && typeof value === 'function') {
+            value(element);
         } else {
-            element.setAttribute(key, value);
+            element.setAttribute(key, value as string);
         }
     }
 
+    // Handle children
     for (const child of children.flat()) {
-        element.append(child instanceof Node ? child : document.createTextNode(String(child)));
+        if (typeof child === 'function') {
+            // It's likely a signal getter
+            const textNode = document.createTextNode(String(child()));
+            element.appendChild(textNode);
+
+            createEffect(() => {
+                textNode.textContent = String(child());
+            });
+        } else {
+            element.append(child instanceof Node ? child : document.createTextNode(String(child)));
+        }
     }
 
     return element;

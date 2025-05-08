@@ -1,29 +1,27 @@
 /// <reference path="./jsx.d.ts" />
 import { h, Fragment } from './jsx-runtime';
-import { autorun, createEffect, createSignal, onCleanup, onMount } from './signal';
+import { createEffect, createSignal, onCleanup, onMount } from './signal';
 import './style.css';
 
-export function Counter() {
-  const [count, setCount] = createSignal(0);
+const [count, setCount] = createSignal(0);
 
-  onMount(() => {
-    console.log("Counter mounted");
-
-    onCleanup(() => {
-      console.log("Counter cleanup");
-    });
-  });
+export function Counter(props: { style?: Partial<CSSStyleDeclaration> }) {
 
   createEffect(() => {
-    console.log("Count changed:", count());
+    console.log("Effect runs");
+
+    onMount(() => console.log("Mounted!"));
+    onCleanup(() => console.log("Cleaned up!"));
+
+    return () => console.log("Effect cleanup");
   });
 
-  return autorun(() => {
-    return <div>
-      <p>Count: {count()}</p>
+  return (
+    <div style={props.style}>
+      <p>Count: {count}</p>
       <button onclick={() => setCount(count() + 1)}>+</button>
     </div>
-  });
+  );
 }
 
 function App() {
@@ -41,9 +39,15 @@ function App() {
         Click Me
       </button>
       <>
-        <h1>Hello</h1>
-        <Counter />
-        <Counter />
+        <h1>Hello {count} {count()}</h1>
+
+        {
+          count() % 2 == 1 ?
+            <Counter style={{ background: "red" }} />
+            :
+            <Counter style={{ background: "blue" }} />
+        }
+
       </>
     </div>
   );

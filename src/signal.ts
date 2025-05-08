@@ -1,27 +1,43 @@
 let currentSubscriber: null | (() => void) = null;
-let currentCleanup: (() => void) | null = null;
+let currentCleanups: (() => void)[] | null = null;
 let pendingMounts: (() => void)[] = [];
-let pendingCleanups: (() => void)[] = [];
 
 export function onMount(fn: () => void) {
     pendingMounts.push(fn);
 }
 
+
 export function onCleanup(fn: () => void) {
-    currentCleanup = fn;
+    if (currentCleanups) {
+        currentCleanups.push(fn);
+    }
 }
 
 export function createEffect(fn: () => void) {
     let cleanupFn: (() => void) | void;
+    let prevCleanups: (() => void)[] | null = null;
 
     const run = () => {
-        if (cleanupFn) cleanupFn();
+        if (cleanupFn) cleanupFn(); // effect-returned cleanup
+        if (prevCleanups) {
+            for (const fn of prevCleanups) fn(); // user cleanups
+        }
+
         currentSubscriber = run;
-        cleanupFn = fn();
+        currentCleanups = [];
+        cleanupFn = fn(); // may return another cleanup
         currentSubscriber = null;
+
+        prevCleanups = currentCleanups;
+        currentCleanups = null;
     };
 
     run();
+
+    while (pendingMounts.length) {
+        const mountFn = pendingMounts.shift();
+        if (mountFn) mountFn();
+    }
 }
 
 export function createSignal<T>(initial: T): [() => T, (v: T) => void] {
@@ -39,31 +55,4 @@ export function createSignal<T>(initial: T): [() => T, (v: T) => void] {
     };
 
     return [get, set];
-}
-
-export function autorun(fn: () => JSX.Element): JSX.Element {
-    if (currentCleanup) currentCleanup();
-
-    // Use a placeholder to wrap around the dynamic content
-    let currentElement = fn();
-
-    const rerender = () => {
-        const newElement = fn();
-        currentElement.replaceWith(newElement);
-        currentElement = newElement;
-    };
-
-    currentSubscriber = rerender;
-    fn(); // Collect dependencies
-    currentSubscriber = null;
-
-    pendingMounts.forEach((m) => m());
-    pendingMounts = [];
-
-    if (currentCleanup) {
-        pendingCleanups.push(currentCleanup);
-        currentCleanup = null;
-    }
-
-    return currentElement;
 }
